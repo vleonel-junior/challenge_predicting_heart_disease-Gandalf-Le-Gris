@@ -12,15 +12,19 @@ class BaseModel(ABC):
     Classe de base abstraite (Interface) pour tous nos modèles.
     Garantit que chaque modèle implémentera `fit` et `predict_proba`.
     """
-    def __init__(self, params=None):
+    def __init__(self, params=None, load_best=True):
         self.params = params if params is not None else {}
         self.model = None
+        self.load_best = load_best
 
     def _load_best_params(self, model_name):
         """
         Cherche si un fichier JSON d'hyperparamètres optimisés par Optuna existe pour ce modèle.
         Si oui, il écrase les paramètres par défaut avec les paramètres optimisés.
         """
+        if not self.load_best:
+            return
+        
         # On regarde dans le dossier d'exécution ou dans le dossier parent (selon si on lance depuis src/ ou racine)
         possible_paths = [
             f'models/best_params_{model_name}.json', 
@@ -53,8 +57,8 @@ class LightGBMWrapper(BaseModel):
     """
     Wrapper pour LightGBM.
     """
-    def __init__(self, params=None):
-        super().__init__(params)
+    def __init__(self, params=None, load_best=True):
+        super().__init__(params, load_best=load_best)
         self._load_best_params('lgbm')
         
     def fit(self, X_train, y_train, X_val=None, y_val=None):
@@ -97,8 +101,8 @@ class XGBoostWrapper(BaseModel):
     """
     Wrapper pour XGBoost.
     """
-    def __init__(self, params=None):
-        super().__init__(params)
+    def __init__(self, params=None, load_best=True):
+        super().__init__(params, load_best=load_best)
         self._load_best_params('xgb')
 
     def fit(self, X_train, y_train, X_val=None, y_val=None):
@@ -141,8 +145,8 @@ class CatBoostWrapper(BaseModel):
     """
     Wrapper pour CatBoost, le spécialiste des données tabulaires et catégorielles.
     """
-    def __init__(self, params=None, cat_features=None):
-        super().__init__(params)
+    def __init__(self, params=None, cat_features=None, load_best=True):
+        super().__init__(params, load_best=load_best)
         self.cat_features = cat_features
         self._load_best_params('catboost')
 

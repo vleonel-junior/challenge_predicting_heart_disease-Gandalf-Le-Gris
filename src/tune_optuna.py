@@ -9,9 +9,7 @@ from sklearn.metrics import roc_auc_score
 from features import HeartDiseaseFeatureEngineer
 
 # Models
-from lightgbm import LGBMClassifier
-from xgboost import XGBClassifier
-from catboost import CatBoostClassifier
+from models import LightGBMWrapper, XGBoostWrapper, CatBoostWrapper
 
 def load_and_preprocess(train_path):
     train_df = pd.read_csv(train_path)
@@ -30,8 +28,7 @@ def load_and_preprocess(train_path):
 def objective_lgbm(trial, X, y):
     params = {
         'objective': 'binary',
-        'metric': 'auc',
-        'verbosity': -1,
+        'metric': 'binary_logloss',
         'boosting_type': 'gbdt',
         'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),
         'num_leaves': trial.suggest_int('num_leaves', 15, 127),
@@ -41,18 +38,16 @@ def objective_lgbm(trial, X, y):
         'subsample': trial.suggest_float('subsample', 0.5, 1.0),
         'reg_alpha': trial.suggest_float('reg_alpha', 1e-8, 10.0, log=True),
         'reg_lambda': trial.suggest_float('reg_lambda', 1e-8, 10.0, log=True),
-        'random_state': 42,
-        'n_estimators': 1000 # On laisse beaucoup d'arbres, l'early stopping fera le reste
+        'random_state': 42
     }
     
-    return evaluate_model(LGBMClassifier(**params), X, y, fit_params={'eval_metric': 'auc'})
+    return evaluate_model(LightGBMWrapper(params, load_best=False), X, y)
 
 def objective_xgb(trial, X, y):
     params = {
         'objective': 'binary:logistic',
-        'eval_metric': 'auc',
+        'eval_metric': 'logloss',
         'tree_method': 'hist',
-        'enable_categorical': True,
         'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),
         'max_depth': trial.suggest_int('max_depth', 3, 10),
         'min_child_weight': trial.suggest_int('min_child_weight', 1, 15),
@@ -61,49 +56,44 @@ def objective_xgb(trial, X, y):
         'gamma': trial.suggest_float('gamma', 0, 5),
         'alpha': trial.suggest_float('alpha', 1e-8, 10.0, log=True),
         'lambda': trial.suggest_float('lambda', 1e-8, 10.0, log=True),
-        'random_state': 42,
-        'n_estimators': 1000
+        'random_state': 42
     }
     
-    # xgb bugge avec verbose parfois dans optuna s'il n'y a pas l'early stopping précis
-    return evaluate_model(XGBClassifier(**params), X, y)
+    return evaluate_model(XGBoostWrapper(params, load_best=False), X, y)
 
 def objective_catboost(trial, X, y):
     params = {
         'loss_function': 'Logloss',
-        'eval_metric': 'AUC',
+        'eval_metric': 'Logloss',
         'learning_rate': trial.suggest_float('learning_rate', 0.005, 0.1, log=True),
         'depth': trial.suggest_int('depth', 4, 10),
         'l2_leaf_reg': trial.suggest_float('l2_leaf_reg', 1e-3, 10.0, log=True),
         'subsample': trial.suggest_float('subsample', 0.5, 1.0),
         'random_strength': trial.suggest_float('random_strength', 1e-3, 10.0, log=True),
         'min_data_in_leaf': trial.suggest_int('min_data_in_leaf', 1, 50),
-        'random_seed': 42,
-        'iterations': 1000,
-        'verbose': False
+        'random_seed': 42
     }
     
     cat_features = list(X.select_dtypes(include=['category', 'object']).columns)
     
-    # Pas besoin de fit_params complexes pour Catboost, on l'initie et on fit direct
-    return evaluate_model(CatBoostClassifier(**params), X, y, fit_params={'cat_features': cat_features, 'verbose': False})
+    return evaluate_model(CatBoostWrapper(params, cat_features=cat_features, load_best=False), X, y)
 
-def evaluate_model(clf, X, y, fit_params=None):
+def evaluate_model(wrapper, X, y):
     """
-    Entraîne le modèle sur 3 Folds stricts et renvoie l'AUC OOF Moyen (pour Optuna).
+    Entraîne le wrapper du modèle sur 3 Folds stricts et renvoie l'AUC OOF Moyen (pour Optuna).
     """
     skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=42)
     oof_preds = np.zeros(len(X))
-    fit_p = fit_params if fit_params else {}
     
     for train_idx, val_idx in skf.split(X, y):
         X_tr, y_tr = X.iloc[train_idx], y[train_idx]
         X_va, y_va = X.iloc[val_idx], y[val_idx]
         
-        clf.fit(X_tr, y_tr, **fit_p)
+        # Le Wrapper gère son propre early stopping automatiquement avec le val_set
+        wrapper.fit(X_tr, y_tr, X_va, y_va)
         
-        # Obtenir juste la probabilité de la classe 1
-        oof_preds[val_idx] = clf.predict_proba(X_va)[:, 1]
+        # Le wrapper renvoie directement un array 1D de probabilités
+        oof_preds[val_idx] = wrapper.predict_proba(X_va)
         
     return roc_auc_score(y, oof_preds)
 
