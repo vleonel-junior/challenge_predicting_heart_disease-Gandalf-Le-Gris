@@ -36,8 +36,11 @@ class LightGBMWrapper(BaseModel):
             'objective': 'binary',
             'metric': 'binary_logloss',
             'boosting_type': 'gbdt',
-            'learning_rate': 0.05,
+            'learning_rate': 0.03, # Baisse du LR pour une meilleure convergence
             'num_leaves': 31,
+            'colsample_bytree': 0.8, # Subsampling des colonnes (évite l'overfit)
+            'subsample': 0.8, # Subsampling des lignes
+            'min_child_samples': 20,
             'verbose': -1,
             'random_state': 42
         }
@@ -74,8 +77,11 @@ class XGBoostWrapper(BaseModel):
         default_params = {
             'objective': 'binary:logistic',
             'eval_metric': 'logloss',
-            'learning_rate': 0.05,
+            'learning_rate': 0.03,
             'max_depth': 6,
+            'colsample_bytree': 0.8,
+            'subsample': 0.8,
+            'min_child_weight': 1,
             'tree_method': 'hist',
             'random_state': 42
         }
@@ -115,9 +121,11 @@ class CatBoostWrapper(BaseModel):
         default_params = {
             'loss_function': 'Logloss',
             'eval_metric': 'Logloss',
-            'learning_rate': 0.05,
-            'iterations': 1000,
+            'learning_rate': 0.03,
+            'iterations': 1500, # Augmenté car LR plus faible
             'depth': 6,
+            'l2_leaf_reg': 3, # Regularisation L2 robuste
+            'subsample': 0.8,
             'random_seed': 42,
             'verbose': False
         }
@@ -163,11 +171,11 @@ class AutoGluonWrapper(BaseModel):
         
         # Dossier unique par fit pour éviter que les Folds de CV de train.py ne s'écrasent
         save_path = f"AutogluonModels/fold_{np.random.randint(100000)}"
-        
-        presets = self.params.get('presets', 'good_quality')
-        # On passe à 600 secondes (10 minutes) par fold par défaut pour lui laisser sa chance
-        # Et jusqu'à 1 heure si on est prêt pour la vraie soumission
-        time_limit = self.params.get('time_limit', 600)  
+        # Pour AutoGluon, le secret c'est "best_quality" (qui fait du bagging et du stacking interne).
+        # Attention : best_quality est TRES gourmand en temps
+        presets = self.params.get('presets', 'best_quality')
+        # On passe à 3600 secondes (1 heure) par fold par défaut pour lui laisser déployer ses ailes
+        time_limit = self.params.get('time_limit', 3600)  
         
         # On ajoute verbosity=1 pour voir ce qu'il fait, et on force num_gpus 'auto' (ray gère) 
         # ou au moins d'autoriser les modèles à détecter le CUDA.
