@@ -70,7 +70,10 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
             
             # Initialisation du modèle avec la seed spécifique (random_state pour LGBM/XGB, random_seed pour CatBoost)
             model_class = MODEL_ZOO[model_name]
-            clf = model_class({'random_state': seed, 'random_seed': seed})
+            if model_name == 'catboost':
+                clf = model_class({'random_seed': seed})
+            else:
+                clf = model_class({'random_state': seed})
             
             # Entraînement avec early stopping sur le fold de validation
             clf.fit(X_tr, y_tr, X_va, y_va)
