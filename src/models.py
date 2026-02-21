@@ -71,14 +71,13 @@ class XGBoostWrapper(BaseModel):
         super().__init__(params)
 
     def fit(self, X_train, y_train, X_val=None, y_val=None):
-        # Enable categorical support automatically if pandas categorical columns exist
         default_params = {
             'objective': 'binary:logistic',
             'eval_metric': 'logloss',
             'learning_rate': 0.05,
             'max_depth': 6,
-            'random_state': 42,
-            'enable_categorical': True 
+            'tree_method': 'hist',
+            'random_state': 42
         }
         default_params.update(self.params)
         
