@@ -1,3 +1,5 @@
+import os
+import json
 import numpy as np
 import pandas as pd
 from abc import ABC, abstractmethod
@@ -14,6 +16,30 @@ class BaseModel(ABC):
         self.params = params if params is not None else {}
         self.model = None
 
+    def _load_best_params(self, model_name):
+        """
+        Cherche si un fichier JSON d'hyperparamètres optimisés par Optuna existe pour ce modèle.
+        Si oui, il écrase les paramètres par défaut avec les paramètres optimisés.
+        """
+        # On regarde dans le dossier d'exécution ou dans le dossier parent (selon si on lance depuis src/ ou racine)
+        possible_paths = [
+            f'models/best_params_{model_name}.json', 
+            f'../models/best_params_{model_name}.json'
+        ]
+        
+        for path in possible_paths:
+            if os.path.exists(path):
+                print(f"[INFO] Paramètres optimisés par Optuna trouvés pour {model_name} ! Chargement depuis {path}...")
+                with open(path, 'r') as f:
+                    best_params = json.load(f)
+                    
+                # On merge. IMPORTANT : On ne veut pas écraser les paramètres explicites 
+                # (comme 'random_state' ou 'random_seed' fournis par le Seed Averaging)
+                for k, v in best_params.items():
+                    if k not in self.params:
+                        self.params[k] = v
+                break
+
     @abstractmethod
     def fit(self, X_train, y_train, X_val=None, y_val=None):
         pass
@@ -29,6 +55,7 @@ class LightGBMWrapper(BaseModel):
     """
     def __init__(self, params=None):
         super().__init__(params)
+        self._load_best_params('lgbm')
         
     def fit(self, X_train, y_train, X_val=None, y_val=None):
         # Paramètres par défaut robustes pour le tabulaire
@@ -72,6 +99,7 @@ class XGBoostWrapper(BaseModel):
     """
     def __init__(self, params=None):
         super().__init__(params)
+        self._load_best_params('xgb')
 
     def fit(self, X_train, y_train, X_val=None, y_val=None):
         default_params = {
@@ -116,6 +144,7 @@ class CatBoostWrapper(BaseModel):
     def __init__(self, params=None, cat_features=None):
         super().__init__(params)
         self.cat_features = cat_features
+        self._load_best_params('catboost')
 
     def fit(self, X_train, y_train, X_val=None, y_val=None):
         default_params = {

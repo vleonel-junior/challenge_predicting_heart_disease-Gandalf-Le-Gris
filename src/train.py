@@ -121,10 +121,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, choices=['lgbm', 'xgb', 'catboost', 'all'], 
                         help="Modèle à entraîner (lgbm, xgb, catboost, ou all)")
+    parser.add_argument("--pseudo", action="store_true", 
+                        help="Si activé, utilise le fichier train_pseudo.csv généré par pseudo_labeling.py")
     args = parser.parse_args()
     
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
-    train_p = f"{data_dir}/train.csv"
+    
+    # Automatisation du pseudo-labeling !
+    if args.pseudo:
+        train_p = f"{data_dir}/train_pseudo.csv"
+        print(f"⚠️ [MODE PSEUDO-LABELING ACTIVÉ] Entraînement sur {train_p} !! ⚠️")
+    else:
+        train_p = f"{data_dir}/train.csv"
+        
     test_p = f"{data_dir}/test.csv"
     
     if args.model == 'all':
