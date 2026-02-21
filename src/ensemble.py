@@ -6,16 +6,18 @@ import optuna
 from sklearn.metrics import log_loss, roc_auc_score
 from scipy.optimize import minimize
 
-def load_predictions(model_names, data_dir='../data'):
+def load_predictions(model_names, data_dir='data'):
     """
     Charge les OOF (Out-Of-Fold) pour l'ensemble et les test_preds pour la soumission.
     """
     oof_dfs = []
     test_dfs = []
     
+    proc_dir = os.path.join(data_dir, 'processed')
+    
     for m in model_names:
-        oof_path = f"{data_dir}/processed/oof_{m}.csv"
-        test_path = f"{data_dir}/processed/test_{m}.csv"
+        oof_path = os.path.join(proc_dir, f"oof_{m}.csv")
+        test_path = os.path.join(proc_dir, f"test_{m}.csv")
         
         if os.path.exists(oof_path) and os.path.exists(test_path):
             oof_dfs.append(pd.read_csv(oof_path).rename(columns={f'pred_{m}': m}).set_index('id'))

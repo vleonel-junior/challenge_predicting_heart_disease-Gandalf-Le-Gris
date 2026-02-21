@@ -89,16 +89,21 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, random_state=4
     print(f"AUC Out-Of-Fold Globale : {roc_auc_score(y, oof_preds):.4f}")
     
     # 4. Sauvegarde des prédictions OOF et Test pour l'ensembling
-    os.makedirs('../models', exist_ok=True)
-    os.makedirs('../data/processed', exist_ok=True)
+    # On déduit le dossier de sauvegarde selon où on exécute
+    base_dir = os.path.dirname(os.path.dirname(train_path)) if 'data' in train_path else '.'
+    proc_dir = os.path.join(base_dir, 'data', 'processed')
+    models_dir = os.path.join(base_dir, 'models')
+    
+    os.makedirs(models_dir, exist_ok=True)
+    os.makedirs(proc_dir, exist_ok=True)
     
     # On sauve les prédictions d'entrainement pour le modèle "Stacking" / "Ensemble"
-    pd.DataFrame({'id': train_df['id'], f'pred_{model_name}': oof_preds}).to_csv(f'../data/processed/oof_{model_name}.csv', index=False)
+    pd.DataFrame({'id': train_df['id'], f'pred_{model_name}': oof_preds}).to_csv(os.path.join(proc_dir, f'oof_{model_name}.csv'), index=False)
     
     # On sauve les prédictions sur le test (moyennées)
-    pd.DataFrame({'id': test_df['id'], f'pred_{model_name}': test_preds}).to_csv(f'../data/processed/test_{model_name}.csv', index=False)
+    pd.DataFrame({'id': test_df['id'], f'pred_{model_name}': test_preds}).to_csv(os.path.join(proc_dir, f'test_{model_name}.csv'), index=False)
     
-    print(f"Prédictions sauvegardées dans '../data/processed/' pour l'ensembling.\n")
+    print(f"Prédictions sauvegardées dans '{proc_dir}' pour l'ensembling.\n")
 
 
 if __name__ == "__main__":
