@@ -165,15 +165,17 @@ class AutoGluonWrapper(BaseModel):
         save_path = f"AutogluonModels/fold_{np.random.randint(100000)}"
         
         presets = self.params.get('presets', 'good_quality')
-        # Pour une Cross-Validation de 5 folds, on limite le temps de chaque fold 
-        # (ex: 120 secondes par défaut) pour éviter un entrainement de 4h x 5 = 20h. 
-        # On pourra augmenter ça à 3600 (1h par fold) via les kwargs dans train.py plus tard.
-        time_limit = self.params.get('time_limit', 120)  
+        # On passe à 600 secondes (10 minutes) par fold par défaut pour lui laisser sa chance
+        # Et jusqu'à 1 heure si on est prêt pour la vraie soumission
+        time_limit = self.params.get('time_limit', 600)  
         
-        self.model = TabularPredictor(label='target', eval_metric='roc_auc', path=save_path, verbosity=0).fit(
+        # On ajoute verbosity=1 pour voir ce qu'il fait, et on force num_gpus 'auto' (ray gère) 
+        # ou au moins d'autoriser les modèles à détecter le CUDA.
+        self.model = TabularPredictor(label='target', eval_metric='roc_auc', path=save_path, verbosity=1).fit(
             train_data=train_data,
             presets=presets,
-            time_limit=time_limit
+            time_limit=time_limit,
+            num_gpus=1 # Autorise l'utilisation d'1 GPU par modèle si dispo
         )
         return self
 
