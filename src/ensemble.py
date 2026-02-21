@@ -98,7 +98,7 @@ def create_submission(TEST, best_weights, output_path='../data/submission.csv'):
 
 if __name__ == "__main__":
     # Liste de nos cadors
-    model_list = ['lgbm', 'catboost', 'xgb', 'autogluon']
+    model_list = ['lgbm', 'catboost', 'xgb']
     
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
     

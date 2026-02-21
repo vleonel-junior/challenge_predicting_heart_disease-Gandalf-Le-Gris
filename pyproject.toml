@@ -12,7 +12,6 @@ dependencies = [
     "xgboost",
     "lightgbm",
     "catboost",
-    "autogluon",
     "tabpfn",
     "optuna",
     "seaborn",

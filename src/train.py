@@ -7,14 +7,13 @@ from sklearn.metrics import log_loss, roc_auc_score, accuracy_score
 import joblib
 
 from features import HeartDiseaseFeatureEngineer
-from models import LightGBMWrapper, XGBoostWrapper, CatBoostWrapper, AutoGluonWrapper
+from models import LightGBMWrapper, XGBoostWrapper, CatBoostWrapper
 
 # Dictionnaire pour appeler nos classes par leur nom court
 MODEL_ZOO = {
     'lgbm': LightGBMWrapper,
     'xgb': XGBoostWrapper,
-    'catboost': CatBoostWrapper,
-    'autogluon': AutoGluonWrapper
+    'catboost': CatBoostWrapper
 }
 
 def train_and_eval(model_name, train_path, test_path, n_splits=5, random_state=42):
@@ -108,8 +107,8 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, random_state=4
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, required=True, choices=['lgbm', 'xgb', 'catboost', 'autogluon', 'all'], 
-                        help="Modèle à entraîner (lgbm, xgb, catboost, autogluon ou all)")
+    parser.add_argument("--model", type=str, required=True, choices=['lgbm', 'xgb', 'catboost', 'all'], 
+                        help="Modèle à entraîner (lgbm, xgb, catboost, ou all)")
     args = parser.parse_args()
     
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
@@ -117,7 +116,7 @@ if __name__ == "__main__":
     test_p = f"{data_dir}/test.csv"
     
     if args.model == 'all':
-        for m in ['lgbm', 'xgb', 'catboost', 'autogluon']:
+        for m in ['lgbm', 'xgb', 'catboost']:
             train_and_eval(m, train_p, test_p)
     else:
         train_and_eval(args.model, train_p, test_p)
