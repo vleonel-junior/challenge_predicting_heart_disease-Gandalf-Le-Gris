@@ -82,14 +82,13 @@ def create_submission(TEST, best_weights, output_path='../data/submission.csv'):
     for m, w in best_weights.items():
         final_preds += w * TEST[m]
         
-    # La compétition demande des entiers '0' ou '1'. 
-    # Pour un AUC de 0.5 optimal, on peut chercher le meilleur seuil sur le Train,
-    # mais 0.5 est le standard par défaut pour de la log_loss.
-    final_class = (final_preds > 0.5).astype(int)
+    # ATTENTION : Kaggle évalue sur l'AUC (Area Under the ROC Curve).
+    # Ils s'attendent donc à recevoir des PROBABILITÉS (ex: 0.85, 0.12) et SURTOUT PAS des classes 0 ou 1.
+    # On n'arrondit donc RIEN du tout ici !
     
     sub_df = pd.DataFrame({
         'id': TEST.index,
-        'Heart Disease': final_class
+        'Heart Disease': final_preds
     })
     
     sub_df.to_csv(output_path, index=False)
