@@ -51,6 +51,7 @@ def objective_lgbm(trial, X, y, use_gpu=False):
         params['device'] = 'gpu'
         params['gpu_platform_id'] = 0
         params['gpu_device_id'] = 0
+        params['gpu_use_dp'] = False  # Utiliser la simple précision (souvent plus propre/rapide sur GPU)
     
     return evaluate_model(LightGBMWrapper(params, load_best=False), X, y)
 
@@ -70,8 +71,8 @@ def objective_xgb(trial, X, y, use_gpu=False):
     }
     
     if use_gpu:
-        params['tree_method'] = 'gpu_hist'
-        # params['device'] = 'cuda' # For XGBoost 2.0+
+        params['tree_method'] = 'hist'
+        params['device'] = 'cuda'
     else:
         params['tree_method'] = 'hist'
     
@@ -95,12 +96,42 @@ def objective_catboost(trial, X, y, use_gpu=False):
     if use_gpu:
         params['task_type'] = 'GPU'
         params['devices'] = '0'
+        # 'subsample' n'est pas supporté avec le bootstrap par défaut (Bayesian) sur GPU
+        # On peut soit l'enlever, soit forcer 'bootstrap_type': 'Bernoulli'
+        params['bootstrap_type'] = 'Bernoulli'
+        params['subsample'] = trial.suggest_float('subsample', 0.5, 1.0)
     else:
         params['task_type'] = 'CPU'
+        params['subsample'] = trial.suggest_float('subsample', 0.5, 1.0)
     
     cat_features = list(X.select_dtypes(include=['category', 'object']).columns)
     
     return evaluate_model(CatBoostWrapper(params, cat_features=cat_features, load_best=False), X, y)
+
+@contextmanager
+def silent_output():
+    """Silences both stdout and stderr at the file descriptor level (handles C-level outputs)."""
+    # On ouvre devnull pour redirection
+    try:
+        null_fd = os.open(os.devnull, os.O_RDWR)
+        # On sauvegarde les FD actuels
+        save_stdout = os.dup(1)
+        save_stderr = os.dup(2)
+        try:
+            # Redirection des FD 1 et 2 vers devnull
+            os.dup2(null_fd, 1)
+            os.dup2(null_fd, 2)
+            yield
+        finally:
+            # Restauration
+            os.dup2(save_stdout, 1)
+            os.dup2(save_stderr, 2)
+            os.close(save_stdout)
+            os.close(save_stderr)
+            os.close(null_fd)
+    except Exception:
+        # Fallback au cas où os.open/dup foire sur certains systèmes
+        yield
 
 def evaluate_model(wrapper, X, y):
     """
@@ -113,8 +144,9 @@ def evaluate_model(wrapper, X, y):
         X_tr, y_tr = X.iloc[train_idx], y[train_idx]
         X_va, y_va = X.iloc[val_idx], y[val_idx]
         
-        # Le Wrapper gère son propre early stopping automatiquement avec le val_set
-        wrapper.fit(X_tr, y_tr, X_va, y_va)
+        # On silence TOUTE sortie console C-level (OpenCL compiler) pendant le fit
+        with silent_output():
+            wrapper.fit(X_tr, y_tr, X_va, y_va)
         
         # Le wrapper renvoie directement un array 1D de probabilités
         oof_preds[val_idx] = wrapper.predict_proba(X_va)
