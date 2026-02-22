@@ -97,12 +97,14 @@ def objective_catboost(trial, X, y, use_gpu=False):
     if use_gpu:
         params['task_type'] = 'GPU'
         params['devices'] = '0'
-        # 'subsample' n'est pas supporté avec le bootstrap par défaut (Bayesian) sur GPU
-        # On peut soit l'enlever, soit forcer 'bootstrap_type': 'Bernoulli'
-        params['bootstrap_type'] = 'Bernoulli'
-        params['subsample'] = trial.suggest_float('subsample', 0.5, 1.0)
+        # Sur GPU, on utilise le bootstrap Bayesian par défaut pour pouvoir utiliser bagging_temperature (Gorishiny style)
+        # On enlève donc subsample qui est incompatible avec Bayesian.
+        params['bootstrap_type'] = 'Bayesian'
+        params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0.0, 1.0)
     else:
         params['task_type'] = 'CPU'
+        # Sur CPU, on peut garder Bernoulli et subsample
+        params['bootstrap_type'] = 'Bernoulli'
         params['subsample'] = trial.suggest_float('subsample', 0.5, 1.0)
     
     cat_features = list(X.select_dtypes(include=['category', 'object']).columns)
@@ -112,27 +114,24 @@ def objective_catboost(trial, X, y, use_gpu=False):
 @contextmanager
 def silent_output():
     """Silences both stdout and stderr at the file descriptor level (handles C-level outputs)."""
-    # On ouvre devnull pour redirection
-    try:
-        null_fd = os.open(os.devnull, os.O_RDWR)
-        # On sauvegarde les FD actuels
-        save_stdout = os.dup(1)
-        save_stderr = os.dup(2)
-        try:
-            # Redirection des FD 1 et 2 vers devnull
-            os.dup2(null_fd, 1)
-            os.dup2(null_fd, 2)
-            yield
-        finally:
-            # Restauration
-            os.dup2(save_stdout, 1)
-            os.dup2(save_stderr, 2)
-            os.close(save_stdout)
-            os.close(save_stderr)
-            os.close(null_fd)
-    except Exception:
-        # Fallback au cas où os.open/dup foire sur certains systèmes
+    # Si on est dans un environnement où os.dup ne fonctionne pas bien
+    if not hasattr(os, 'dup'):
         yield
+        return
+
+    null_fd = os.open(os.devnull, os.O_RDWR)
+    save_stdout = os.dup(1)
+    save_stderr = os.dup(2)
+    try:
+        os.dup2(null_fd, 1)
+        os.dup2(null_fd, 2)
+        yield
+    finally:
+        os.dup2(save_stdout, 1)
+        os.dup2(save_stderr, 2)
+        os.close(save_stdout)
+        os.close(save_stderr)
+        os.close(null_fd)
 
 def evaluate_model(wrapper, X, y):
     """
