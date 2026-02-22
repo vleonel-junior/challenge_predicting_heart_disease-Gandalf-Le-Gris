@@ -159,7 +159,6 @@ class CatBoostWrapper(BaseModel):
             'iterations': 1500, # Augmenté car LR plus faible
             'depth': 6,
             'l2_leaf_reg': 3, # Regularisation L2 robuste
-            'subsample': 0.8,
             'random_seed': 42,
             'verbose': False
         }
