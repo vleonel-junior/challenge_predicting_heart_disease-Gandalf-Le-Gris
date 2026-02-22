@@ -137,6 +137,7 @@ class XGBoostWrapper(BaseModel):
         return self
 
     def predict_proba(self, X):
+        # On utilise gpu_predictor si on est en gpu_hist pour accélérer aussi l'inférence
         dtest = xgb.DMatrix(X, enable_categorical=True)
         return self.model.predict(dtest)
 
