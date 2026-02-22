@@ -107,12 +107,34 @@ if __name__ == "__main__":
     if OOF.empty or TEST.empty:
         print("Erreur : Impossible de builder l'ensemble, aucun fichier de prédiction trouvé.")
     else:
-        # 2. Chargement de la vraie Target d'entrainement pour optimiser par rapport aux OOF
-        train_df = pd.read_csv(f"{data_dir}/train.csv")
-        y_true = train_df['Heart Disease'].map({'Presence': 1, 'Absence': 0}).values
+        # 2. Chargement de la Target
+        # On détecte automatiquement si on a utilisé le pseudo-labeling
+        train_filename = "train_pseudo.csv" if os.path.exists(os.path.join(data_dir, "train_pseudo.csv")) else "train.csv"
+        train_path = os.path.join(data_dir, train_filename)
         
-        # 3. Calcul des Poids Optimaux avec Optuna
-        best_w = optimize_weights_optuna(OOF, y_true)
+        print(f"Alignement automatique sur {train_path}...")
+        train_df = pd.read_csv(train_path)
         
-        # 4. Création finale
-        create_submission(TEST, best_w, output_path=f"../submission.csv")
+        # On mappe la target
+        train_df['target'] = train_df['Heart Disease'].map({'Presence': 1, 'Absence': 0})
+        
+        # --- ALIGNEMENT ROBUSTE ---
+        # On s'assure que OOF et y_true correspondent exactement via l'ID
+        # (Indispensable si on mélange des modèles entraînés avec/sans pseudo-labels)
+        common_ids = OOF.index.intersection(train_df['id'])
+        
+        if len(common_ids) == 0:
+            print("ERREUR CRITIQUE : Aucun ID commun entre les prédictions et le fichier train.")
+        else:
+            if len(common_ids) < len(OOF):
+                print(f"⚠️ Alignement : {len(common_ids)} ids trouvés sur {len(OOF)} prédictions.")
+            
+            # On filtre et on trie pour garantir l'ordre
+            OOF_aligned = OOF.loc[common_ids]
+            y_true = train_df.set_index('id').loc[common_ids]['target'].values
+            
+            # 3. Calcul des Poids Optimaux avec Optuna
+            best_w = optimize_weights_optuna(OOF_aligned, y_true)
+            
+            # 4. Création finale
+            create_submission(TEST, best_w, output_path=f"../submission.csv")

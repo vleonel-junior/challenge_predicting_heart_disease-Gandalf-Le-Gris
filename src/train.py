@@ -16,13 +16,15 @@ MODEL_ZOO = {
     'catboost': CatBoostWrapper
 }
 
-def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43, 44]):
+def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43, 44], use_gpu=False):
     """
     Entraîne un modèle spécifique en Validation Croisée (K-Fold Stratifié) sur plusieurs Seeds.
     Génère les prédictions "Out-Of-Fold" (OOF) pour l'ensembling futur 
     ainsi que les prédictions moyennes sur le Test Set.
     """
     print(f"--- Démarrage de l'entraînement avec {model_name.upper()} (Seed Averaging sur {len(seeds)} seeds) ---")
+    if use_gpu:
+        print("🚀 Accélération GPU ACTIVÉE")
     
     # 1. Chargement des données
     train_df = pd.read_csv(train_path)
@@ -68,12 +70,16 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
             X_tr, y_tr = X.iloc[train_idx], y.iloc[train_idx]
             X_va, y_va = X.iloc[val_idx], y.iloc[val_idx]
             
-            # Initialisation du modèle avec la seed spécifique (random_state pour LGBM/XGB, random_seed pour CatBoost)
+            # Initialisation du modèle avec la seed spécifique
             model_class = MODEL_ZOO[model_name]
+            model_params = {'use_gpu': use_gpu}
+            
             if model_name == 'catboost':
-                clf = model_class({'random_seed': seed})
+                model_params['random_seed'] = seed
             else:
-                clf = model_class({'random_state': seed})
+                model_params['random_state'] = seed
+            
+            clf = model_class(model_params)
             
             # Entraînement avec early stopping sur le fold de validation
             clf.fit(X_tr, y_tr, X_va, y_va)
@@ -123,6 +129,8 @@ if __name__ == "__main__":
                         help="Modèle à entraîner (lgbm, xgb, catboost, ou all)")
     parser.add_argument("--pseudo", action="store_true", 
                         help="Si activé, utilise le fichier train_pseudo.csv généré par pseudo_labeling.py")
+    parser.add_argument("--gpu", action="store_true", default=True,
+                        help="Activer l'accélération GPU")
     args = parser.parse_args()
     
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
@@ -138,6 +146,6 @@ if __name__ == "__main__":
     
     if args.model == 'all':
         for m in ['lgbm', 'xgb', 'catboost']:
-            train_and_eval(m, train_p, test_p)
+            train_and_eval(m, train_p, test_p, use_gpu=args.gpu)
     else:
-        train_and_eval(args.model, train_p, test_p)
+        train_and_eval(args.model, train_p, test_p, use_gpu=args.gpu)

@@ -14,6 +14,8 @@ class BaseModel(ABC):
     """
     def __init__(self, params=None, load_best=True):
         self.params = params if params is not None else {}
+        # Extraction du flag GPU si présent
+        self.use_gpu = self.params.pop('use_gpu', False)
         self.model = None
         self.load_best = load_best
 
@@ -75,6 +77,15 @@ class LightGBMWrapper(BaseModel):
             'verbose': -1,
             'random_state': 42
         }
+        
+        if self.use_gpu:
+            default_params.update({
+                'device': 'gpu',
+                'gpu_platform_id': 0,
+                'gpu_device_id': 0,
+                'gpu_use_dp': False
+            })
+
         default_params.update(self.params)
         
         dtrain = lgb.Dataset(X_train, label=y_train)
@@ -117,6 +128,15 @@ class XGBoostWrapper(BaseModel):
             'tree_method': 'hist',
             'random_state': 42
         }
+        
+        if self.use_gpu:
+            default_params.update({
+                'tree_method': 'hist',
+                'device': 'cuda'
+            })
+        else:
+            default_params['tree_method'] = 'hist'
+
         default_params.update(self.params)
         
         dtrain = xgb.DMatrix(X_train, label=y_train, enable_categorical=True)
@@ -162,6 +182,16 @@ class CatBoostWrapper(BaseModel):
             'random_seed': 42,
             'verbose': False
         }
+        
+        if self.use_gpu:
+            default_params.update({
+                'task_type': 'GPU',
+                'devices': '0',
+                'bootstrap_type': 'Bayesian'
+            })
+        else:
+            default_params['task_type'] = 'CPU'
+
         default_params.update(self.params)
         
         # Identification automatique des colonnes catégorielles si non spécifiées
