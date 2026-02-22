@@ -123,14 +123,24 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
     print(f"Prédictions sauvegardées dans '{proc_dir}' pour l'ensembling.\n")
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, choices=['lgbm', 'xgb', 'catboost', 'all'], 
                         help="Modèle à entraîner (lgbm, xgb, catboost, ou all)")
     parser.add_argument("--pseudo", action="store_true", 
                         help="Si activé, utilise le fichier train_pseudo.csv généré par pseudo_labeling.py")
-    parser.add_argument("--gpu", action="store_true", default=True,
-                        help="Activer l'accélération GPU")
+    parser.add_argument("--gpu", type=str2bool, default=True,
+                        help="Activer l'accélération GPU (True par défaut)")
     args = parser.parse_args()
     
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
