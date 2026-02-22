@@ -4,6 +4,11 @@ import json
 import numpy as np
 import pandas as pd
 import optuna
+try:
+    from tqdm import tqdm
+    TQDM_AVAILABLE = True
+except ImportError:
+    TQDM_AVAILABLE = False
 from sklearn.model_selection import StratifiedKFold
 from sklearn.metrics import roc_auc_score
 from features import HeartDiseaseFeatureEngineer
@@ -122,6 +127,9 @@ def tune_model(model_name, n_trials=50, use_gpu=False):
     if use_gpu:
         print("🚀 Accélération GPU ACTIVÉE")
     
+    # Réduire le bruit d'Optuna
+    optuna.logging.set_verbosity(optuna.logging.WARNING)
+    
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
     train_p = f"{data_dir}/train.csv"
     
@@ -130,12 +138,15 @@ def tune_model(model_name, n_trials=50, use_gpu=False):
     
     study = optuna.create_study(direction='maximize', study_name=f'tune_{model_name}')
     
+    # Barre de progression tqdm (Gorishiny style)
+    show_progress = TQDM_AVAILABLE
+    
     if model_name == 'lgbm':
-        study.optimize(lambda trial: objective_lgbm(trial, X, y, use_gpu=use_gpu), n_trials=n_trials)
+        study.optimize(lambda trial: objective_lgbm(trial, X, y, use_gpu=use_gpu), n_trials=n_trials, show_progress_bar=show_progress)
     elif model_name == 'xgb':
-        study.optimize(lambda trial: objective_xgb(trial, X, y, use_gpu=use_gpu), n_trials=n_trials)
+        study.optimize(lambda trial: objective_xgb(trial, X, y, use_gpu=use_gpu), n_trials=n_trials, show_progress_bar=show_progress)
     elif model_name == 'catboost':
-        study.optimize(lambda trial: objective_catboost(trial, X, y, use_gpu=use_gpu), n_trials=n_trials)
+        study.optimize(lambda trial: objective_catboost(trial, X, y, use_gpu=use_gpu), n_trials=n_trials, show_progress_bar=show_progress)
         
     print(f"\n[SUCCÈS] Meilleure combinaison trouvée pour {model_name.upper()} : AUC = {study.best_value:.5f}")
     
@@ -154,12 +165,22 @@ def tune_model(model_name, n_trials=50, use_gpu=False):
     print("models.py les chargera tout seul lors du prochain entraînement !")
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True, choices=['lgbm', 'xgb', 'catboost'], 
                         help="Modèle à tuner (lgbm, xgb, ou catboost)")
     parser.add_argument("--trials", type=int, default=30, help="Nombre d'essais (plus = meilleur mais + long)")
-    parser.add_argument("--gpu", type=bool, default=True, help="Activer l'accélération GPU pour le tuning (True par défaut pour Kaggle)")
+    parser.add_argument("--gpu", type=str2bool, default=True, help="Activer l'accélération GPU pour le tuning (True par défaut)")
     args = parser.parse_args()
     
     tune_model(args.model, args.trials, use_gpu=args.gpu)
