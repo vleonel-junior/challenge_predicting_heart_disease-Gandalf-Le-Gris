@@ -48,14 +48,25 @@ def create_pseudo_labels(train_path, test_path, sub_path, output_path, lower_thr
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sub", type=str, default="../submission.csv", help="Chemin vers le fichier de soumission source")
-    parser.add_argument("--lower", type=float, default=0.01, help="Seuil inférieur (ex: 0.01)")
-    parser.add_argument("--upper", type=float, default=0.99, help="Seuil supérieur (ex: 0.99)")
+    # On cherche le dossier data intelligemment
+    data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
+    
+    parser.add_argument("--train", type=str, default=f"{data_dir}/train.csv")
+    parser.add_argument("--test", type=str, default=f"{data_dir}/test.csv")
+    # On cherche la soumission dans le dossier parent ou courant
+    default_sub = "../submission.csv" if os.path.exists("../submission.csv") else "submission.csv"
+    parser.add_argument("--sub", type=str, default=default_sub)
+    parser.add_argument("--out", type=str, default=f"{data_dir}/train_pseudo.csv")
+    parser.add_argument("--lower", type=float, default=0.05, help="Seuil inférieur (Absence)")
+    parser.add_argument("--upper", type=float, default=0.95, help="Seuil supérieur (Presence)")
+    
     args = parser.parse_args()
     
-    data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
-    train_p = f"{data_dir}/train.csv"
-    test_p = f"{data_dir}/test.csv"
-    out_p = f"{data_dir}/train_pseudo.csv"
+    print(f"📦 Utilisation du dossier data : {data_dir}")
+    print(f"📑 Lecture de la soumission : {args.sub}")
     
-    create_pseudo_labels(train_p, test_p, args.sub, out_p, args.lower, args.upper)
+    try:
+        create_pseudo_labels(args.train, args.test, args.sub, args.out, args.lower, args.upper)
+    except FileNotFoundError as e:
+        print(f"❌ ERREUR : {e}")
+        print("💡 Conseil : Lancez 'src/ensemble.py' d'abord pour générer 'submission.csv'.")

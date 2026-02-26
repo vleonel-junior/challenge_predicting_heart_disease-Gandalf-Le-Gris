@@ -76,11 +76,11 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
             target_enc_cols = ['Thallium', 'Chest pain type', 'Number of vessels fluro']
             for col in target_enc_cols:
                 # Calcul des moyennes sur le train fold uniquement
-                means = y_tr.groupby(X_tr[col]).mean()
-                # Application (Mapping)
-                X_tr[f'{col}_TE'] = X_tr[col].map(means).fillna(y_tr.mean())
-                X_va[f'{col}_TE'] = X_va[col].map(means).fillna(y_tr.mean())
-                X_te[f'{col}_TE'] = X_te[col].map(means).fillna(y_tr.mean())
+                means = y_tr.groupby(X_tr[col], observed=True).mean()
+                # Application (Mapping) - On s'assure que ce sont des colonnes numériques
+                X_tr[f'{col}_TE'] = X_tr[col].map(means).astype(float).fillna(y_tr.mean())
+                X_va[f'{col}_TE'] = X_va[col].map(means).astype(float).fillna(y_tr.mean())
+                X_te[f'{col}_TE'] = X_te[col].map(means).astype(float).fillna(y_tr.mean())
 
             # Initialisation du modèle avec la seed spécifique
             model_class = MODEL_ZOO[model_name]
