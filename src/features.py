@@ -22,35 +22,41 @@ class HeartDiseaseFeatureEngineer(BaseEstimator, TransformerMixin):
         # -------------------------------------------------------------------
         
         # Déficit Chronotrope : La Max HR mesurée vs la Max HR théorique (220 - Age)
-        # Un déficit négatif important indique que le coeur n'atteint pas son effort max théorique.
         df['Deficit_HR'] = df['Max HR'] - (220 - df['Age'])
         
         # Syndrome Ischémique Sévère (Interaction ST / Angine)
-        # Croiser la dépression ST avec l'angine d'effort.
         df['Severe_Ischemia_Risk'] = df['ST depression'] * df['Exercise angina']
         
         # Ratio d'effort (plus il est bas, plus le risque est élevé)
-        df['Effort_Ratio'] = df['Max HR'] / (df['ST depression'] + 1.0) # +1.0 pour éviter div by zero
+        df['Effort_Ratio'] = df['Max HR'] / (df['ST depression'] + 1.0)
+        
+        # Charge de travail métabolique (approximation simple)
+        df['Metabolic_Load'] = df['Age'] * df['Max HR']
+        
+        # Risque Lipidique Relatif (Cholestérol / Max HR)
+        df['Lipid_Risk_Factor'] = df['Cholesterol'] / (df['Max HR'] + 1.0)
+        
+        # Interaction Pression / Cholestérol
+        df['Vascular_Tension_Score'] = df['BP'] * df['Cholesterol']
         
         # -------------------------------------------------------------------
-        # 2. BINNING / DISCRÉTISATION DU BRUIT
+        # 2. BINNING / DISCRÉTISATION (Quantiles pour plus de robustesse)
         # -------------------------------------------------------------------
         
-        # Pression Artérielle (BP) -> Regroupement pour lisser les effets des arrondis médicaux
-        df['BP_Group'] = pd.cut(df['BP'], 
-                                bins=[0, 120, 130, 140, 150, 300], 
-                                labels=['Optimum', 'Normal', 'High-Normal', 'Hypertension_S1', 'Hypertension_S2'])
+        # Pression Artérielle -> Binning par quantiles (5 groupes)
+        df['BP_Quantile'] = pd.qcut(df['BP'], 5, labels=False, duplicates='drop')
         
-        # Âge -> Regroupement par décennies
-        df['Age_Group'] = pd.cut(df['Age'], 
-                                 bins=[0, 40, 50, 60, 70, 100], 
-                                 labels=['Under 40', '40s', '50s', '60s', 'Over 70'])
+        # Âge -> Binning par quantiles
+        df['Age_Quantile'] = pd.qcut(df['Age'], 5, labels=False, duplicates='drop')
         
+        # Cholestérol -> Binning par quantiles
+        df['Chol_Quantile'] = pd.qcut(df['Cholesterol'], 5, labels=False, duplicates='drop')
+
         # -------------------------------------------------------------------
         # 3. EXTRACTION CATÉGORIELLE ("Golden Features")
         # -------------------------------------------------------------------
         
-        # Thallium : Extraire explicitement le défaut réversible (Type 7)
+        # Thallium : Défaut réversible (Type 7)
         df['Is_Reversible_Defect'] = (df['Thallium'] == 7).astype(int)
         
         # Vaisseaux : Binariser (0 vaisseaux atteints vs au moins 1)
@@ -63,11 +69,11 @@ class HeartDiseaseFeatureEngineer(BaseEstimator, TransformerMixin):
         # 4. ENCODAGE / CASTING
         # -------------------------------------------------------------------
         
-        # Variables à passer expressément en "category" pour LightGBM / CatBoost
+        # Variables catégorielles (incluant nos nouveaux bins)
         categorical_cols = [
             'Sex', 'Chest pain type', 'FBS over 120', 'EKG results', 
             'Exercise angina', 'Slope of ST', 'Number of vessels fluro', 'Thallium',
-            'BP_Group', 'Age_Group'
+            'BP_Quantile', 'Age_Quantile', 'Chol_Quantile'
         ]
         
         if self.use_categories:

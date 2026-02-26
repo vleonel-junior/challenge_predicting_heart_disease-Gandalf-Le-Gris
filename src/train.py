@@ -7,13 +7,14 @@ from sklearn.metrics import log_loss, roc_auc_score, accuracy_score
 import joblib
 
 from features import HeartDiseaseFeatureEngineer
-from models import LightGBMWrapper, XGBoostWrapper, CatBoostWrapper
+from models import LightGBMWrapper, XGBoostWrapper, CatBoostWrapper, HistGradWrapper
 
 # Dictionnaire pour appeler nos classes par leur nom court
 MODEL_ZOO = {
     'lgbm': LightGBMWrapper,
     'xgb': XGBoostWrapper,
-    'catboost': CatBoostWrapper
+    'catboost': CatBoostWrapper,
+    'hist_grad': HistGradWrapper
 }
 
 def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43, 44], use_gpu=False):
@@ -69,7 +70,18 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
             
             X_tr, y_tr = X.iloc[train_idx], y.iloc[train_idx]
             X_va, y_va = X.iloc[val_idx], y.iloc[val_idx]
+            X_te = X_test.copy()
             
+            # --- TARGET ENCODING (K-Fold pour éviter le leakage) ---
+            target_enc_cols = ['Thallium', 'Chest pain type', 'Number of vessels fluro']
+            for col in target_enc_cols:
+                # Calcul des moyennes sur le train fold uniquement
+                means = y_tr.groupby(X_tr[col]).mean()
+                # Application (Mapping)
+                X_tr[f'{col}_TE'] = X_tr[col].map(means).fillna(y_tr.mean())
+                X_va[f'{col}_TE'] = X_va[col].map(means).fillna(y_tr.mean())
+                X_te[f'{col}_TE'] = X_te[col].map(means).fillna(y_tr.mean())
+
             # Initialisation du modèle avec la seed spécifique
             model_class = MODEL_ZOO[model_name]
             model_params = {'use_gpu': use_gpu}
@@ -81,7 +93,7 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
             
             clf = model_class(model_params)
             
-            # Entraînement avec early stopping sur le fold de validation
+            # Entraînement avec early stopping
             clf.fit(X_tr, y_tr, X_va, y_va)
             
             # Prédiction sur la validation (OOF)
@@ -94,7 +106,7 @@ def train_and_eval(model_name, train_path, test_path, n_splits=5, seeds=[42, 43,
             metrics.append(fold_auc)
             
             # Prédiction sur le Test set (Averaging au sein de la seed)
-            test_preds_seed += clf.predict_proba(X_test) / n_splits
+            test_preds_seed += clf.predict_proba(X_te) / n_splits
             
         print(f"  Moyenne AUC CV (Seed {seed}) : {np.mean(metrics):.4f}")
         

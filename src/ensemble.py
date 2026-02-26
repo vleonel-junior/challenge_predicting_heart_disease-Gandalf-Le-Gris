@@ -31,47 +31,46 @@ def load_predictions(model_names, data_dir='data'):
     
     return OOF, TEST
 
-def optimize_weights_optuna(OOF, y_true):
+from sklearn.linear_model import LogisticRegression
+
+def train_stacking_meta_model(OOF, y_true):
     """
-    Utilise Optuna pour trouver les poids de "Blend" parfaits qui maximisent l'AUC Score global
-    sur les prédictions Out-Of-Fold (OOF).
+    Entraîne un meta-modèle (Logistic Regression) sur les prédictions OOF.
+    C'est plus puissant que le simple Blend car il apprend à corriger les biais de chaque modèle.
     """
-    print("\n--- Début de l'optimisation Optuna des poids d'Ensemble ---")
+    print("\n--- Entraînement du Meta-Modèle de Stacking (Logistic Regression) ---")
     
-    def objective(trial):
-        # On définit un poids pour chaque modèle entre 0 et 1
-        weights = [trial.suggest_float(f'w_{m}', 0, 1) for m in OOF.columns]
-        
-        # Normalisation pour que la somme fasse 1
-        total_w = sum(weights)
-        if total_w == 0:
-            return 0.5 # Pénalité (AUC aléatoire)
-        weights = [w / total_w for w in weights]
-        
-        # Prédiction finale 'blended' = somme pondérée
-        blended_preds = np.zeros(len(OOF))
-        for i, col in enumerate(OOF.columns):
-            blended_preds += weights[i] * OOF[col]
-            
-        # Dans des compétitions, l'AUC ou le LogLoss est souvent la cible
-        score = roc_auc_score(y_true, blended_preds)
-        return score
-        
-    study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=100, show_progress_bar=False)
+    # On utilise une régression logistique simple (souvent la meilleure en meta-modèle)
+    # avec une régularisation L2 pour éviter d'overfitter sur les probabilités.
+    meta_model = LogisticRegression(C=1.0, solver='lbfgs', max_iter=1000)
+    meta_model.fit(OOF, y_true)
     
-    best_weights_raw = [study.best_params[f'w_{m}'] for m in OOF.columns]
+    # Score OOF du meta-modèle
+    meta_oof_preds = meta_model.predict_proba(OOF)[:, 1]
+    score = roc_auc_score(y_true, meta_oof_preds)
     
-    # Normaliser les meilleurs poids
-    total_w = sum(best_weights_raw)
-    best_weights = {m: (w / total_w) for m, w in zip(OOF.columns, best_weights_raw)}
+    print(f"AUC OOF du Meta-Modèle : {score:.5f}")
     
-    print(f"\nMeilleure combinaison AUC OOF trouvée : {study.best_value:.5f}")
-    print("Poids idéaux pour la Soumission :")
-    for m, w in best_weights.items():
-        print(f" - {m.upper()} : {w:.2%}")
+    # Affichage des coefficients (importance relative des modèles)
+    print("Coefficients du Meta-Modèle :")
+    for m, coef in zip(OOF.columns, meta_model.coef_[0]):
+        print(f" - {m.upper()} : {coef:.4f}")
         
-    return best_weights
+    return meta_model
+
+def create_submission_stacking(TEST, meta_model, output_path='../submission.csv'):
+    """
+    Utilise le meta-modèle pour prédire sur le Test Set.
+    """
+    final_preds = meta_model.predict_proba(TEST)[:, 1]
+    
+    sub_df = pd.DataFrame({
+        'id': TEST.index,
+        'Heart Disease': final_preds
+    })
+    
+    sub_df.to_csv(output_path, index=False)
+    print(f"\n[SUCCÈS] Soumission STACKING générée : {output_path}")
 
 def create_submission(TEST, best_weights, output_path='../data/submission.csv'):
     """
@@ -96,8 +95,8 @@ def create_submission(TEST, best_weights, output_path='../data/submission.csv'):
     print("Prête à être uploadée sur Kaggle !")
 
 if __name__ == "__main__":
-    # Liste de nos cadors
-    model_list = ['lgbm', 'catboost', 'xgb']
+    # Liste de nos cadors (On ajoute HistGrad pour la diversité !)
+    model_list = ['lgbm', 'catboost', 'xgb', 'hist_grad']
     
     data_dir = '../data' if os.path.exists('../data/train.csv') else 'data'
     
@@ -133,8 +132,10 @@ if __name__ == "__main__":
             OOF_aligned = OOF.loc[common_ids]
             y_true = train_df.set_index('id').loc[common_ids]['target'].values
             
-            # 3. Calcul des Poids Optimaux avec Optuna
-            best_w = optimize_weights_optuna(OOF_aligned, y_true)
+            # 3. Entraînement du Meta-Modèle (Stacking)
+            meta_model = train_stacking_meta_model(OOF_aligned, y_true)
             
-            # 4. Création finale
-            create_submission(TEST, best_w, output_path=f"../submission.csv")
+            # 4. Création finale de la soumission
+            # On remonte d'un cran si on est dans src/
+            output_p = '../submission.csv' if os.path.exists('../src') else 'submission.csv'
+            create_submission_stacking(TEST, meta_model, output_path=output_p)

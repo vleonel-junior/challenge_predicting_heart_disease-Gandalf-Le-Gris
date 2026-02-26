@@ -216,3 +216,36 @@ class CatBoostWrapper(BaseModel):
     def predict_proba(self, X):
         # Retourne uniquement la probabilité de la classe 1 (présence de maladie)
         return self.model.predict_proba(X)[:, 1]
+
+
+from sklearn.ensemble import HistGradientBoostingClassifier
+
+class HistGradWrapper(BaseModel):
+    """
+    Wrapper pour HistGradientBoostingClassifier (Scikit-learn).
+    Apporte de la diversité à l'ensemble.
+    """
+    def __init__(self, params=None, load_best=True):
+        super().__init__(params, load_best=load_best)
+        self._load_best_params('hist_grad')
+
+    def fit(self, X_train, y_train, X_val=None, y_val=None):
+        default_params = {
+            'max_iter': 500,
+            'max_depth': 6,
+            'learning_rate': 0.05,
+            'random_state': 42
+        }
+        default_params.update(self.params)
+        
+        # HistGrad supporte les catégories nativement si on lui dit
+        cat_indices = [i for i, col in enumerate(X_train.columns) if X_train[col].dtype.name == 'category']
+        if cat_indices:
+            default_params['categorical_features'] = cat_indices
+            
+        self.model = HistGradientBoostingClassifier(**default_params)
+        self.model.fit(X_train, y_train)
+        return self
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)[:, 1]
